@@ -1,9 +1,9 @@
-# in_app_purchase_msstore
+# in_app_purchase_msstore: project status
 
 Unofficial Windows implementation of Flutter's `in_app_purchase` interface, using
 Microsoft Store `StoreContext` for products, purchases, consumables and restore.
 Windows extras expose app/trial licenses, add-on provenance and consumable balances.
-BSD-3-Clause. Repository remains private; nothing has been published to pub.dev.
+Licence: BSD-3-Clause.
 
 ## Verification (2026-10-21)
 
@@ -11,37 +11,27 @@ BSD-3-Clause. Repository remains private; nothing has been published to pub.dev.
 - 21 C++ tests pass on Windows, including the real coroutine with an injected Store
   adapter, asynchronous UI reply dispatch, and atomic journal failure handling.
 - Windows debug and release example builds pass.
-- [GitHub-hosted Ubuntu/Windows CI](https://github.com/jawahar1711/in_app_purchase_msstore/actions/runs/39572890018) is green for implementation commit `a6c0ca3` (81 Dart + 21 C++ tests).
-- Test-first evidence: 14 new Dart regressions and 3 native regressions failed before
-  their fixes. Additional recovery edges and native persistence/COM tests were added;
-  the latter caught missing-file handling and CO_E_NOTINITIALIZED before correction.
+- GitHub-hosted Ubuntu and Windows CI runs on every push (`.github/workflows/ci.yml`).
+- Not yet verified: a real purchase in a packaged, Store-associated app.
 
-## Review disposition
+## Hardening notes
 
-All nine findings accepted and fixed; none disputed. No independent post-fix review
-or packaged commerce verification is claimed.
-
-| # | Finding and fix | Regression evidence |
+| Area | Behaviour | Regression evidence |
 |---|---|---|
-| 1 | Unfinished consumables: persisted attempts, delivery/fulfillment states, stable GUIDs, startup replay and Store reconciliation; app acknowledges even auto-consumed deliveries | `review_regressions_test.dart`: restart in both modes, lost purchase/fulfillment responses, failed journal write, Store-only units, same-session retry; native journal test |
-| 2 | Purchase context/HWND/request initiation on UI thread; MTA lifetime retained for pool work and replies | Native injected adapter asserts initiating thread/HWND and reply thread across suspension |
-| 3 | Cached-only entries prevent aggregate online confirmation; matching online data replaces cached metadata | Native cached A / online empty regression |
-| 4 | Missing/nonpositive expiry never becomes lifetime ownership; Store-supplied far-future dates still work | Native unknown-expiry and year-9999 regressions |
-| 5 | Fulfillment helper rejects missing retry GUIDs before dispatch | Dart missing-ID and lost-response/same-ID regressions |
-| 6 | Failed/null app license and list-only ownership reads throw | Dart failed/null/inactive and partial ownership regressions |
-| 7 | Buy boolean reflects request initiation, including unavailable/preflight paths | Both Dart buy methods; native asynchronous failure retains started=true |
-| 8 | NotPurchased with failing HRESULT exposes IAPError, except known cancellation | Dart failure/dismissal regression |
-| 9 | Country fallback reads actual Windows home geographic region | Dart channel returns AU independently of UI locale |
+| Unfinished consumables | Persisted attempts, delivery/fulfillment states, stable GUIDs, startup replay and Store reconciliation; the app acknowledges even auto-consumed deliveries | `review_regressions_test.dart`: restart in both modes, lost purchase/fulfillment responses, failed journal write, Store-only units, same-session retry; native journal test |
+| Threading | Purchase context, window handle and request start on the UI thread; other Store work on the thread pool with replies back on the platform thread | Native injected adapter asserts initiating thread/HWND and reply thread across suspension |
+| Cached licenses | Cached-only entries never count as confirmed online; matching online data replaces cached metadata | Native cached / online-empty regression |
+| Unknown expiry | A missing or non-positive expiry never becomes lifetime ownership; Store-supplied far-future dates still work | Native unknown-expiry and year-9999 regressions |
+| Fulfillment retries | The fulfillment helper rejects a missing retry GUID before dispatch | Dart missing-ID and lost-response/same-ID regressions |
+| License reads | Failed or null app-license and list-only ownership reads throw | Dart failed/null/inactive and partial ownership regressions |
+| Buy return value | `buy*` returns whether a Store request actually started | Both Dart buy methods; native asynchronous failure keeps started=true |
+| Cancel vs error | `NotPurchased` with a failing HRESULT is an error, except a known cancellation | Dart failure/dismissal regression |
+| Country | `countryCode` reads the Windows home geographic region (not a Store billing country) | Dart channel test independent of UI locale |
 
-## Limits and founder steps
+## Limits
 
 Delivery notifications are at least once. Apps must durably deduplicate grants by
 `purchaseID` before `completePurchase`. Use one plugin instance/process and keep the
 Store account stable while deliveries are pending. Local recovery cannot reconstruct
 consumed goods after uninstall or on another device. No client receipts, subscription
 upgrade/downgrade, or verified Store billing-country API. See [CHANNEL.md](CHANNEL.md).
-
-Founder needed: a Partner Center test app with durable and consumable add-ons for a
-packaged, non-elevated buy/unlock/relaunch/restore check. Unit tests and hosted builds
-do not prove commerce. Public GitHub visibility, pub.dev publishing and publisher
-choice still require founder approval. No Store account/app changes were made.
