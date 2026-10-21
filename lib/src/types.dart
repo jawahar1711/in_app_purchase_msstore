@@ -87,8 +87,8 @@ class MsStorePurchaseDetails extends PurchaseDetails {
   /// The in-app offer token set in Partner Center, for a restored add-on.
   final String? inAppOfferToken;
 
-  /// When the licence ends, for a restored add-on. Durables get a far-future
-  /// date from the Store.
+  /// When the licence ends, for a restored add-on. Non-expiring durables
+  /// have a Store-supplied far-future date; timed licences retain their expiry.
   final DateTime? expirationDate;
 }
 

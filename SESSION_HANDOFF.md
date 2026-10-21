@@ -5,10 +5,13 @@ All nine findings from the 2026-10-21 review are accepted. Dart recovery, helper
 handling, launch status and country-code fixes are implemented; native purchase
 threading, provenance, expiry, persistence and recovery are implemented.
 
-Verification: initial regression run failed 14 Dart tests and 3 native tests before
-fixes. The expanded Dart suite passes 81 tests. All 21 native tests and the Windows debug example build pass, including the
-stronger journal and suspended-reply checks. Format and analysis are clean.
-Final CI URL belongs in `docs/SUMMARY.md` after hosted CI completes.
+Implementation commit: `a6c0ca3`. Initial regression run failed 14 Dart tests and
+3 native tests before fixes. Final validation: 81 Dart + 21 native tests, clean
+format/analysis, and Windows debug/release example builds. Hosted CI is green:
+https://github.com/jawahar1711/in_app_purchase_msstore/actions/runs/39572890018
+The review disposition and delivery limits are in `docs/SUMMARY.md`.
+Remaining work is external: packaged commerce proof and the Herdr notification
+blocker below. Do not publish or create a Store test app without founder approval.
 
 ## Recovery contract
 

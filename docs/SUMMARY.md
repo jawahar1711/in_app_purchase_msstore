@@ -10,7 +10,8 @@ BSD-3-Clause. Repository remains private; nothing has been published to pub.dev.
 - 81 Dart tests pass; format and `flutter analyze` pass with no issues.
 - 21 C++ tests pass on Windows, including the real coroutine with an injected Store
   adapter, asynchronous UI reply dispatch, and atomic journal failure handling.
-- Windows debug example build passes. GitHub-hosted Ubuntu/Windows CI: pending push.
+- Windows debug and release example builds pass.
+- [GitHub-hosted Ubuntu/Windows CI](https://github.com/jawahar1711/in_app_purchase_msstore/actions/runs/39572890018) is green for implementation commit `a6c0ca3` (81 Dart + 21 C++ tests).
 - Test-first evidence: 14 new Dart regressions and 3 native regressions failed before
   their fixes. Additional recovery edges and native persistence/COM tests were added;
   the latter caught missing-file handling and CO_E_NOTINITIALIZED before correction.
