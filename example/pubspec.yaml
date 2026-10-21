@@ -1,0 +1,36 @@
+name: in_app_purchase_msstore_example
+description: Example app for in_app_purchase_msstore.
+publish_to: none
+version: 1.0.0+1
+
+environment:
+  sdk: ^3.10.0
+  flutter: ">=3.38.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  in_app_purchase: ^3.3.1
+  in_app_purchase_msstore:
+    # When you use the package in your own app, depend on the published
+    # version instead of a path.
+    path: ../
+
+dev_dependencies:
+  flutter_lints: ^6.0.0
+  msix: ^3.18.0
+
+flutter:
+  uses-material-design: true
+
+# MSIX packaging (https://pub.dev/packages/msix). Every value below is a
+# placeholder. Copy the real values from Partner Center:
+# your app > Product management > Product identity.
+msix_config:
+  display_name: IAP MSStore Example
+  publisher_display_name: YOUR_PUBLISHER_DISPLAY_NAME
+  identity_name: YOUR_PACKAGE_IDENTITY_NAME
+  publisher: CN=YOUR-PUBLISHER-ID
+  msix_version: 1.0.0.0
+  capabilities: internetClient
+  store: true
