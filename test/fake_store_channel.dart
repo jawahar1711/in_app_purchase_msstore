@@ -1,7 +1,7 @@
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-/// The channel named in docs/CHANNEL.md.
+/// The channel named in doc/CHANNEL.md.
 const MethodChannel storeChannel = MethodChannel(
   'plugins.flutter.dev/in_app_purchase_msstore',
 );
@@ -64,7 +64,7 @@ class FakeStoreChannel {
   }
 }
 
-/// A `Product` map as the C++ side sends it (docs/CHANNEL.md).
+/// A `Product` map as the C++ side sends it (doc/CHANNEL.md).
 Map<String, Object?> productMap({
   required String storeId,
   String title = 'Title',
@@ -89,7 +89,7 @@ Map<String, Object?> productMap({
   'formattedRecurrencePrice': formattedRecurrencePrice,
 };
 
-/// A `License` map as the C++ side sends it (docs/CHANNEL.md).
+/// A `License` map as the C++ side sends it (doc/CHANNEL.md).
 Map<String, Object?> licenseMap({
   required String storeId,
   required DateTime expirationDate,

@@ -4,7 +4,7 @@ import 'package:in_app_purchase_msstore/in_app_purchase_msstore.dart';
 import 'fake_store_channel.dart';
 
 // Contract tests for the Windows-only addition: every License field and
-// every FulfillmentStatus string in docs/CHANNEL.md, through the real channel.
+// every FulfillmentStatus string in doc/CHANNEL.md, through the real channel.
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -41,7 +41,7 @@ void main() {
     });
   });
 
-  // docs/CHANNEL.md: every FulfillmentStatus string.
+  // doc/CHANNEL.md: every FulfillmentStatus string.
   const List<String> fulfillmentStatuses = <String>[
     'succeeded',
     'insufficientQuantity',

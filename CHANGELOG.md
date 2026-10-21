@@ -1,4 +1,4 @@
-## 0.1.0 (unreleased)
+## 0.1.0
 
 * First version. Windows implementation of `in_app_purchase` on top of
   `Windows.Services.Store.StoreContext`:

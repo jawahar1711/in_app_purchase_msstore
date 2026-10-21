@@ -18,7 +18,7 @@
 namespace in_app_purchase_msstore {
 namespace helpers {
 
-// StorePurchaseStatus -> channel status (docs/CHANNEL.md).
+// StorePurchaseStatus -> channel status (doc/CHANNEL.md).
 inline std::string PurchaseStatusName(int32_t status) {
   switch (status) {
     case 0: return "succeeded";         // Succeeded

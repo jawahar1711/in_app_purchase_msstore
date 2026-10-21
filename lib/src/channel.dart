@@ -2,7 +2,7 @@ import 'dart:math';
 
 import 'package:flutter/services.dart';
 
-/// The method channel shared with the C++ plugin. See `docs/CHANNEL.md`.
+/// The method channel shared with the C++ plugin. See `doc/CHANNEL.md`.
 const MethodChannel msStoreChannel = MethodChannel(
   'plugins.flutter.dev/in_app_purchase_msstore',
 );

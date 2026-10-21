@@ -1,6 +1,6 @@
 # in_app_purchase_msstore Flutter Windows plugin: a C++/WinRT wrapper around
 # Windows.Services.Store.StoreContext. The method channel contract lives in
-# docs/CHANNEL.md at the repository root.
+# doc/CHANNEL.md at the repository root.
 
 cmake_minimum_required(VERSION 3.14)
 

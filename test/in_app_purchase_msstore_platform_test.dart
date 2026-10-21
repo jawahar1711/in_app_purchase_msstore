@@ -1,5 +1,5 @@
 // Contract tests: they drive the plugin through the channel name and maps
-// written in docs/CHANNEL.md, and cover what test/dart_unit_*.dart does not
+// written in doc/CHANNEL.md, and cover what test/dart_unit_*.dart does not
 // (every status on buyConsumable, GUID tracking ids, slow fulfilment,
 // completePurchase edge cases, restore with a partial Store answer).
 import 'package:flutter/services.dart';
@@ -72,7 +72,7 @@ void main() {
       )).single;
 
   group('channel contract', () {
-    test('uses the channel name in docs/CHANNEL.md', () async {
+    test('uses the channel name in doc/CHANNEL.md', () async {
       store.reply('isAvailable', true);
       expect(await platform.isAvailable(), isTrue);
       expect(store.callsTo('isAvailable'), hasLength(1));
@@ -109,7 +109,7 @@ void main() {
     });
   });
 
-  // docs/CHANNEL.md "Dart mapping": every PurchaseStatus string.
+  // doc/CHANNEL.md "Dart mapping": every PurchaseStatus string.
   const Map<String, PurchaseStatus> purchaseMapping = <String, PurchaseStatus>{
     'succeeded': PurchaseStatus.purchased,
     'alreadyPurchased': PurchaseStatus.restored,

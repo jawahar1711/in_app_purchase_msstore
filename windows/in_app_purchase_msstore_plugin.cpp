@@ -1,5 +1,5 @@
 // C++/WinRT implementation of in_app_purchase_msstore. Builds to the method
-// channel contract in docs/CHANNEL.md.
+// channel contract in doc/CHANNEL.md.
 //
 // Threading: purchase context binding and RequestPurchaseAsync initiation stay
 // on the Flutter platform/UI thread. Other Store operations use the thread
