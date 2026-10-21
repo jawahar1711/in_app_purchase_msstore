@@ -1,0 +1,60 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # Current Flutter stable (checked 2026-10-21). Update on purpose, not by accident.
+  FLUTTER_VERSION: 3.47.7
+
+jobs:
+  analyze-and-test:
+    name: Analyze, format, test (Ubuntu)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          cache: true
+      - run: flutter pub get
+      - run: flutter pub get
+        working-directory: example
+      - name: Format
+        run: dart format --output=none --set-exit-if-changed lib test example/lib
+      - name: Analyze
+        run: flutter analyze
+      - name: Test
+        run: flutter test
+
+  windows:
+    name: Build example and test (Windows)
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          cache: true
+      - run: flutter pub get
+      - name: Test
+        run: flutter test
+      - name: Build example for Windows
+        working-directory: example
+        run: |
+          flutter pub get
+          flutter build windows --release
