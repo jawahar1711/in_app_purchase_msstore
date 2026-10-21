@@ -245,29 +245,30 @@ class InAppPurchaseMsStorePlatform extends InAppPurchasePlatform {
     if (failure == null) {
       for (final item in ownership!['purchases'] as List<Object?>? ?? []) {
         final owned = item! as Map<Object?, Object?>;
+        // Store-managed balances are unspent units, not undelivered purchases.
+        // Only an unmanaged collection entry proves an outstanding purchase.
+        if (owned['productKind'] != 'UnmanagedConsumable') continue;
         final id = owned['storeId']! as String;
         final quantity = owned['quantity']! as int;
         if (quantity <= 0) continue;
         final existing = recovered.where((r) => r['storeId'] == id).toList();
         if (existing.isNotEmpty) {
-          // An ambiguous fulfilment may already have reduced the balance.
-          // Never invent another GUID while this product has a local record.
+          // Reconcile a lost purchase reply without replacing its saved GUID.
           for (final record in existing) {
             if (record['state'] == 'attempt') record['state'] = 'purchased';
           }
         } else {
-          for (var unit = 0; unit < quantity; unit++) {
-            recovered.add({
-              'id': newTrackingId(),
-              'storeId': id,
-              'state': 'purchased',
-              'date': null,
-            });
-          }
+          recovered.add({
+            'id': newTrackingId(),
+            'storeId': id,
+            'state': 'purchased',
+            'date': null,
+          });
         }
       }
-      // Attempts which never reached fulfillment can be dropped after a
-      // successful empty ownership check. No Store retry GUID has been used.
+      // An attempt alone cannot prove payment. Drop unresolved attempts after
+      // a successful query; ambiguous Store-managed purchases need a backend
+      // ledger. No Store fulfillment retry GUID has been used for an attempt.
       recovered.removeWhere((record) => record['state'] == 'attempt');
       if (records.isNotEmpty || recovered.isNotEmpty) {
         await _journal.save(recovered);

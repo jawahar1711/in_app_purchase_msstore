@@ -64,7 +64,11 @@ void main() {
             case 'purchase':
               if (losePurchaseResponse) {
                 owned = [
-                  {'storeId': param.productDetails.id, 'quantity': 1},
+                  {
+                    'storeId': param.productDetails.id,
+                    'productKind': 'UnmanagedConsumable',
+                    'quantity': 1,
+                  },
                 ];
                 throw PlatformException(code: 'lost_response');
               }
@@ -136,7 +140,7 @@ void main() {
     );
   }
   test(
-    'R1 purchase response lost reconciles Store ownership with saved GUID',
+    'R1 unmanaged purchase response lost reconciles Store ownership with saved GUID',
     () async {
       losePurchaseResponse = true;
       await expectLater(
@@ -154,17 +158,68 @@ void main() {
       expect(consumed, {replay.purchaseID});
     },
   );
-  test('R1 recovers Store-owned consumables with no local journal', () async {
+  test('R1 Store-managed balance without journal never delivers', () async {
     owned = [
-      {'storeId': param.productDetails.id, 'quantity': 2},
+      {
+        'storeId': param.productDetails.id,
+        'productKind': 'Consumable',
+        'quantity': 2,
+      },
+    ];
+    final p = InAppPurchaseMsStorePlatform();
+    final deliveries = <PurchaseDetails>[];
+    final sub = p.purchaseStream.listen(deliveries.addAll);
+    addTearDown(sub.cancel);
+    // Restore is serialized after startup recovery, then drain stream events.
+    await p.restorePurchases();
+    await Future<void>.delayed(Duration.zero);
+    expect(deliveries, isEmpty);
+    expect(consumed, isEmpty);
+    expect(jsonDecode(journal), isEmpty);
+  });
+  test('R1 Store-managed balance never promotes an unpaid attempt', () async {
+    journal = jsonEncode([
+      {
+        'id': '00000000-0000-4000-8000-000000000001',
+        'storeId': param.productDetails.id,
+        'state': 'attempt',
+        'date': null,
+      },
+    ]);
+    owned = [
+      {
+        'storeId': param.productDetails.id,
+        'productKind': 'Consumable',
+        'quantity': 2,
+      },
+    ];
+    final p = InAppPurchaseMsStorePlatform();
+    final deliveries = <PurchaseDetails>[];
+    final sub = p.purchaseStream.listen(deliveries.addAll);
+    addTearDown(sub.cancel);
+    await p.restorePurchases();
+    await Future<void>.delayed(Duration.zero);
+    expect(deliveries, isEmpty);
+    expect(consumed, isEmpty);
+    expect(jsonDecode(journal), isEmpty);
+  });
+  test('R1 mixed collection recovers only one unmanaged purchase', () async {
+    owned = [
+      {'storeId': 'MANAGEDCOINS', 'productKind': 'Consumable', 'quantity': 2},
+      {
+        'storeId': param.productDetails.id,
+        'productKind': 'UnmanagedConsumable',
+        'quantity': 1,
+      },
     ];
     final p = InAppPurchaseMsStorePlatform();
     final batch = await p.purchaseStream.first.timeout(
       const Duration(seconds: 1),
     );
-    expect(batch, hasLength(2));
-    await Future.wait(batch.map(p.completePurchase));
-    expect(consumed, hasLength(2));
+    expect(batch, hasLength(1));
+    expect(batch.single.productID, param.productDetails.id);
+    await p.completePurchase(batch.single);
+    expect(consumed, {batch.single.purchaseID});
     expect(jsonDecode(journal), isEmpty);
   });
   test('R1 journal failure prevents purchase or consumption', () async {
@@ -185,7 +240,11 @@ void main() {
     expect(errors, hasLength(1));
     failRecovery = false;
     owned = [
-      {'storeId': param.productDetails.id, 'quantity': 1},
+      {
+        'storeId': param.productDetails.id,
+        'productKind': 'UnmanagedConsumable',
+        'quantity': 1,
+      },
     ];
     await p.restorePurchases();
     await Future<void>.delayed(Duration.zero);

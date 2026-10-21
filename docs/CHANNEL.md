@@ -17,7 +17,7 @@ initialized even when the application only initialized its UI STA.
 | `getAppLicense` | none | `{isActive: bool, isTrial: bool, trialTimeRemainingSeconds: int?, skuStoreId: String?, expirationDate: String?, message: String?}` |
 | `getConsumableBalance` | `{storeId: String}` | `{status: FulfillmentStatus, balanceRemaining: int?, message: String?}` |
 | `countryCode` | none | Windows `GlobalizationPreferences.HomeGeographicRegion`, or empty string; not Store billing country |
-| `getPendingConsumables` | none | `{purchases: [{storeId: String, quantity: int}], message: String?}`; online collection plus Store-managed balances |
+| `getPendingConsumables` | none | `{purchases: [{storeId: String, productKind: String, quantity: int}], message: String?}`; online collection plus Store-managed balances |
 | `readPurchaseJournal` | none | JSON text; missing file returns `[]` |
 | `writePurchaseJournal` | JSON text | true only after flushed atomic replacement; I/O errors are `PlatformException(journal_io)` |
 
@@ -25,6 +25,11 @@ initialized even when the application only initialized its UI STA.
 currencyCode, productKind, isSubscription: bool, subscriptionPeriod: String?,
 formattedRecurrencePrice: String?}`. Product kinds include `Durable`, `Consumable`
 (Store-managed) and `UnmanagedConsumable` (developer-managed).
+
+For `getPendingConsumables`, `Consumable.quantity` is the remaining Store balance,
+not a count of undelivered purchases. `UnmanagedConsumable.quantity` is 1 for one
+unfulfilled purchase. Dart only reconciles collection entries explicitly marked
+`UnmanagedConsumable`; missing or unknown product kinds cannot prove a purchase.
 
 `License`: `{storeId, skuStoreId, inAppOfferToken, expirationDate: ISO-8601 UTC,
 isActive: bool}`. Add-on `IsActive` is not ownership evidence. Dart requires a future
@@ -57,10 +62,13 @@ Journal records contain `{id: GUID, storeId, state, date}`. States are `attempt`
 and `fulfilled` (Store confirmation received). The same GUID is used for every
 fulfillment retry. Corrupt/unreadable state fails rather than discarding purchases.
 
-On the first stream subscription, recovery reconciles pending attempts with online
-consumable ownership and replays saved deliveries. A successful empty ownership
-query can discard an attempt that never started fulfillment. A failed query leaves
-records intact. Local purchased/fulfilling/fulfilled records can still replay offline.
+On the first stream subscription, recovery replays saved `purchased`, `fulfilling`
+and `fulfilled` records. Only `UnmanagedConsumable` collection entries can promote
+an `attempt` or create a record, one per outstanding purchase with its saved GUID
+reused when present. A Store-managed `Consumable` balance never creates records or
+promotes an attempt, regardless of its quantity. A successful query discards
+unresolved attempts. A failed query leaves records intact. Local
+`purchased`/`fulfilling`/`fulfilled` records can still replay offline.
 `restorePurchases` retries recovery in the same session, then emits durable licenses.
 An offline recovery error is exposed even when cached deliveries/licenses are emitted.
 
@@ -71,8 +79,20 @@ if needed and removes the journal record after confirmed fulfillment. A crash af
 consumption or after app delivery replays the same ID; the app must make delivery
 idempotent. This is at-least-once notification, not an atomic transaction with the
 app's database. Another purchase of the same product is rejected until its pending
-delivery is completed. Store-only balances recover as one record per unit, with no
-new GUID invented while that product already has a journal record.
+delivery is completed.
+
+Both auto-consumption and `completePurchase` report **quantity 1**, so the shared
+API fits Store-managed products configured with **Quantity 1** in Partner Center.
+Larger Store-managed packs must use the Windows addition's `getConsumableBalance`
+and `reportConsumableFulfillment` with the actual consumed quantity and a persisted
+retry GUID. `autoConsume: false` only delays the shared API's quantity-1 call;
+the shared API does not provide custom-quantity completion for larger packs.
+
+A Store-managed purchase that succeeds before a crash but whose successful reply
+was never journaled remains ambiguous. Covering that window needs a backend
+purchase ledger. The plugin deliberately does not infer payment from a balance
+delta: other devices can buy or consume units, so a changed balance cannot identify
+the attempted purchase. The plugin provides no automatic delivery for that window.
 
 Use one platform instance/isolate/process for a package and the same Store account
 while deliveries are pending. Local recovery does not survive uninstall/data deletion,
@@ -83,4 +103,5 @@ Contract sources: [Flutter purchase stream](https://pub.dev/documentation/in_app
 [Microsoft UI-thread requirement](https://learn.microsoft.com/en-us/uwp/api/windows.services.store.storecontext.requestpurchaseasync),
 [fulfillment GUID retries](https://learn.microsoft.com/en-us/uwp/api/windows.services.store.storecontext.reportconsumablefulfillmentasync),
 [consumable types](https://learn.microsoft.com/en-us/uwp/api/windows.services.store.storeproduct.productkind),
+[Partner Center quantity](https://learn.microsoft.com/en-us/windows/apps/publish/publish-your-app/add-on/enter-app-properties),
 [consumable fulfillment](https://learn.microsoft.com/en-us/windows/uwp/monetize/enable-consumable-add-on-purchases).

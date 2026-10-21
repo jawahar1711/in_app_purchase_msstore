@@ -56,6 +56,16 @@ and how to test purchases.
 | `restorePurchases()` | Add-on licences from `GetAppLicenseAsync`, emitted as `restored` |
 | `countryCode()` | Windows home geographic region, not verified Store billing country |
 
+Auto-consumption reports **quantity 1**. For Store-managed (`Consumable`) products,
+this fits add-ons configured with **Quantity 1** in Partner Center. Larger packs
+need the Windows addition's `getConsumableBalance` and
+`reportConsumableFulfillment(quantity: ...)` to report the actual units consumed.
+`autoConsume: false` only defers the shared API's quantity-1 fulfillment until
+`completePurchase`; the shared API does not provide custom-quantity completion.
+[Microsoft's quantity and fulfillment rules](https://learn.microsoft.com/en-us/windows/uwp/monetize/enable-consumable-add-on-purchases)
+describe this distinction; [Partner Center Quantity](https://learn.microsoft.com/en-us/windows/apps/publish/publish-your-app/add-on/enter-app-properties)
+sets how many units each Store-managed purchase grants.
+
 Purchase results on `purchaseStream`:
 
 | `StorePurchaseStatus` | `PurchaseStatus` |
@@ -74,6 +84,18 @@ per ID, then call `completePurchase` whenever `pendingCompletePurchase` is true,
 completion also acknowledges that your app delivered the item. A replay can arrive
 after the app granted content but before it acknowledged delivery, so your grant
 must be idempotent. Complete a pending delivery before buying that product again.
+
+For Store-managed `Consumable` products, recovery only replays journal records in
+`purchased`, `fulfilling` or `fulfilled` state. A remaining Store balance never
+creates a delivery or proves that a pending purchase attempt was paid. For
+developer-managed `UnmanagedConsumable` products, a Store collection entry can
+recover one unfulfilled purchase, including an attempt with a lost reply.
+
+If a Store-managed purchase succeeds but the app crashes before saving the
+successful reply, automatic recovery cannot distinguish it from an unpaid attempt.
+After a successful Store query, unresolved attempts are discarded. Covering this
+window requires a backend purchase ledger: even a before/after balance change
+cannot tie units to a particular purchase when other devices can buy or consume.
 
 `restorePurchases` also retries consumable recovery after connectivity returns.
 Offline recovery errors are exposed; saved deliveries and cached durable licenses

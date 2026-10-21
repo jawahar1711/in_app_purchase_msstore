@@ -487,8 +487,8 @@ winrt::fire_and_forget GetAddOnLicensesAsync(SharedResult result) {
   co_await ReplyAsync(platform_thread, result, EncodableValue(response));
 }
 
-// Recover Store-owned units. UnmanagedConsumable has one outstanding purchase;
-// Consumable balances may contain several independently deliverable units.
+// UnmanagedConsumable has one outstanding purchase. Consumable quantity is an
+// unspent balance, not a purchase count; Dart must distinguish the product kind.
 winrt::fire_and_forget GetPendingConsumablesAsync(SharedResult result) {
   winrt::apartment_context platform_thread;
   MtaUsage mta;
@@ -522,6 +522,7 @@ winrt::fire_and_forget GetPendingConsumablesAsync(SharedResult result) {
         }
         if (quantity > 0) purchases.emplace_back(EncodableMap{
             {EncodableValue("storeId"), EncodableValue(ToUtf8(product.StoreId()))},
+            {EncodableValue("productKind"), EncodableValue(ToUtf8(product.ProductKind()))},
             {EncodableValue("quantity"), EncodableValue(static_cast<int64_t>(quantity))}});
       }
       if (!HasInternetAccess()) throw std::runtime_error("Connectivity lost during consumable recovery.");
