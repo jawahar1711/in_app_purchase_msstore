@@ -1,5 +1,6 @@
-/// Unofficial Microsoft Store (Windows) implementation of Flutter's
+/// Microsoft Store purchases for Flutter on Windows: a drop-in for the
 /// `in_app_purchase` plugin, built on `Windows.Services.Store.StoreContext`.
+/// Not made by Google, the Flutter team or Microsoft.
 ///
 /// Add this package next to `in_app_purchase`. On Windows, Flutter calls
 /// [InAppPurchaseMsStorePlatform.registerWith] at startup, so

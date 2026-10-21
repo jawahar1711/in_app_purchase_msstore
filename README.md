@@ -1,6 +1,6 @@
 # in_app_purchase_msstore
 
-**Unofficial** Windows implementation of Flutter's
+Microsoft Store purchases for Flutter on Windows: a drop-in for the
 [`in_app_purchase`](https://pub.dev/packages/in_app_purchase) plugin. It sells
 Microsoft Store add-ons through
 [`Windows.Services.Store.StoreContext`](https://learn.microsoft.com/en-us/uwp/api/windows.services.store.storecontext).
@@ -8,7 +8,7 @@ Microsoft Store add-ons through
 Your app keeps using `InAppPurchase.instance`. On Windows, the calls go to the Microsoft
 Store. On Android, iOS and macOS, nothing changes.
 
-This package is not made or endorsed by the Flutter team or by Microsoft.
+Not made by Google, the Flutter team or Microsoft.
 
 ## Install
 

@@ -1,6 +1,7 @@
 # in_app_purchase_msstore: project status
 
-Unofficial Windows implementation of Flutter's `in_app_purchase` interface, using
+Microsoft Store purchases for Flutter on Windows: a drop-in for the `in_app_purchase`
+interface (not made by Google, the Flutter team or Microsoft), using
 Microsoft Store `StoreContext` for products, purchases, consumables and restore.
 Windows extras expose app/trial licenses, add-on provenance and consumable balances.
 Licence: BSD-3-Clause.

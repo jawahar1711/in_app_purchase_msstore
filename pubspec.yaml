@@ -1,5 +1,5 @@
 name: in_app_purchase_msstore
-description: Unofficial Microsoft Store (Windows) implementation of Flutter's in_app_purchase plugin, built on Windows.Services.Store.StoreContext.
+description: "Microsoft Store purchases for Flutter on Windows: a drop-in for the in_app_purchase plugin. Not made by Google, the Flutter team or Microsoft."
 version: 0.1.0
 publish_to: none # private until the owner decides to publish
 repository: https://github.com/jawahar1711/in_app_purchase_msstore
