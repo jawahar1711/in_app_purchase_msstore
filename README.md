@@ -124,6 +124,20 @@ final addition = InAppPurchase.instance
     .getPlatformAddition<InAppPurchaseMsStorePlatformAddition>();
 ```
 
+## Verified on a real Store account
+
+On 2026-10-21, signed test builds of the example app ran under two published apps'
+identities on Windows 11, signed in with a real Microsoft Store account:
+
+* `queryProductDetails` loaded a live durable add-on (title, description, price).
+* `restorePurchases` reported an add-on the account already owned as `restored`,
+  again after closing and reopening the app.
+* `buyNonConsumable` opened the real Microsoft Store payment window with the
+  local price including tax. The window was closed without buying.
+
+Not yet verified on a real account: a completed purchase, consumables and
+subscriptions. These paths are covered by the unit and native tests only.
+
 ## Limits
 
 * **No pending state.** The Store dialog finishes before the call returns, so

@@ -12,7 +12,10 @@ Licence: BSD-3-Clause.
   adapter, asynchronous UI reply dispatch, and atomic journal failure handling.
 - Windows debug and release example builds pass.
 - GitHub-hosted Ubuntu and Windows CI runs on every push (`.github/workflows/ci.yml`).
-- Not yet verified: a real purchase in a packaged, Store-associated app.
+- Real Store account (2026-10-21, Windows 11, test builds under two published apps'
+  identities): product query, restore of an owned durable (also after relaunch) and
+  the real payment window (closed without buying) all worked.
+- Not yet verified on a real account: a completed purchase, consumables, subscriptions.
 
 ## Hardening notes
 
