@@ -1,17 +1,16 @@
 // C++/WinRT implementation of in_app_purchase_msstore. Builds to the method
 // channel contract in docs/CHANNEL.md.
 //
-// Threading: every Store call runs after `co_await winrt::resume_background()`
-// so no blocking work happens on the Flutter platform thread (a blocked
-// platform thread freezes the UI). Each handler captures the platform
-// thread's apartment first and switches back to it before replying, because
-// Flutter channel replies belong on the platform thread.
+// Threading: purchase context binding and RequestPurchaseAsync initiation stay
+// on the Flutter platform/UI thread. Other Store operations use the thread
+// pool. All asynchronous replies return to the captured platform apartment.
 //
 // Errors: Store failures come back as a status string, never as a
 // PlatformException. Only bad arguments use result->Error("bad_args").
 
 #include "in_app_purchase_msstore_plugin.h"
 #include "store_helpers.h"
+#include "purchase_journal.h"
 
 #include <flutter/encodable_value.h>
 #include <flutter/method_channel.h>
@@ -25,6 +24,8 @@
 #include <winrt/Windows.Foundation.Collections.h>
 #include <winrt/Windows.Networking.Connectivity.h>
 #include <winrt/Windows.Services.Store.h>
+#include <winrt/Windows.Storage.h>
+#include <winrt/Windows.System.UserProfile.h>
 
 #include <chrono>
 #include <cstdint>
@@ -48,9 +49,6 @@ using SharedResult =
 constexpr const char* kChannelName =
     "plugins.flutter.dev/in_app_purchase_msstore";
 
-// Durable add-ons never expire; the channel needs a date anyway (Dart judges
-// ownership by expirationDate > now).
-constexpr const char* kNeverExpires = "9999-12-31T23:59:59Z";
 
 constexpr const char* kUnavailableMessage =
     "The Microsoft Store is unavailable: the app is not running as a "
@@ -86,6 +84,9 @@ bool IsPackagedProcess() {
 // IInitializeWithWindow before any call that shows Store UI, or the dialog
 // can hang or open off-screen.
 winstore::StoreContext StoreContextForWindow(HWND hwnd) {
+  if (!hwnd || !IsWindow(hwnd) || GetWindowThreadProcessId(hwnd, nullptr) != GetCurrentThreadId()) {
+    throw winrt::hresult_error(HRESULT_FROM_WIN32(ERROR_INVALID_WINDOW_HANDLE));
+  }
   auto context = winstore::StoreContext::GetDefault();
   if (hwnd) {
     auto init = context.as<::IInitializeWithWindow>();
@@ -195,17 +196,30 @@ EncodableMap LicenseToMap(const std::string& store_id,
   };
 }
 
+// Flutter's window thread is STA. Keep an MTA alive while coroutines use
+// thread-pool threads; resume_background alone does not initialize COM.
+struct MtaUsage {
+  CO_MTA_USAGE_COOKIE cookie = nullptr;
+  HRESULT status = CoIncrementMTAUsage(&cookie);
+  ~MtaUsage() { if (cookie) CoDecrementMTAUsage(cookie); }
+  MtaUsage() = default;
+  MtaUsage(const MtaUsage&) = delete;
+  MtaUsage& operator=(const MtaUsage&) = delete;
+};
+
 // --- Coroutine handlers ---------------------------------------------------
 
 winrt::fire_and_forget QueryProductsAsync(std::vector<std::string> store_ids,
                                           SharedResult result) {
   winrt::apartment_context platform_thread;
-  co_await winrt::resume_background();
+  MtaUsage mta;
 
   EncodableList products;
   std::set<std::string> found;
   std::optional<std::string> error;
   try {
+    winrt::check_hresult(mta.status);
+    co_await winrt::resume_background();
     if (!IsPackagedProcess()) {
       error = kUnavailableMessage;
     } else if (!store_ids.empty()) {
@@ -248,18 +262,24 @@ winrt::fire_and_forget QueryProductsAsync(std::vector<std::string> store_ids,
 }
 
 winrt::fire_and_forget PurchaseAsync(HWND hwnd, std::string store_id,
-                                     SharedResult result) {
+                                     SharedResult result, PurchaseRequest request = {}) {
   winrt::apartment_context platform_thread;
-  co_await winrt::resume_background();
+  MtaUsage mta;
+  // Do not suspend to a background thread before opening Store UI.
 
   EncodableMap response;
+  bool request_started = false;
   try {
-    if (!IsPackagedProcess()) {
+    winrt::check_hresult(mta.status);
+    if (!request && !IsPackagedProcess()) {
       response = StatusFailure("unavailable", kUnavailableMessage);
     } else {
-      auto context = StoreContextForWindow(hwnd);
-      auto purchase =
-          co_await context.RequestPurchaseAsync(winrt::to_hstring(store_id));
+      if (!request) request = [](HWND window, const std::string& id) {
+        return StoreContextForWindow(window).RequestPurchaseAsync(winrt::to_hstring(id));
+      };
+      auto operation = request(hwnd, store_id);
+      request_started = true;
+      auto purchase = co_await operation;
       response[EncodableValue("status")] = EncodableValue(
           helpers::PurchaseStatusName(static_cast<int32_t>(purchase.Status())));
       AddExtendedError(&response, purchase.ExtendedError());
@@ -273,6 +293,7 @@ winrt::fire_and_forget PurchaseAsync(HWND hwnd, std::string store_id,
   } catch (...) {
     response = StatusFailure("unknown", "Unknown error during purchase.");
   }
+  response[EncodableValue("requestStarted")] = EncodableValue(request_started);
   co_await ReplyAsync(platform_thread, result, EncodableValue(response));
 }
 
@@ -292,10 +313,12 @@ winrt::fire_and_forget ReportConsumableFulfillmentAsync(
     std::string store_id, uint32_t quantity, winrt::guid tracking_id,
     SharedResult result) {
   winrt::apartment_context platform_thread;
-  co_await winrt::resume_background();
+  MtaUsage mta;
 
   EncodableMap response;
   try {
+    winrt::check_hresult(mta.status);
+    co_await winrt::resume_background();
     if (!IsPackagedProcess()) {
       response = StatusFailure("unavailable", kUnavailableMessage);
     } else {
@@ -317,10 +340,12 @@ winrt::fire_and_forget ReportConsumableFulfillmentAsync(
 winrt::fire_and_forget GetConsumableBalanceAsync(std::string store_id,
                                                  SharedResult result) {
   winrt::apartment_context platform_thread;
-  co_await winrt::resume_background();
+  MtaUsage mta;
 
   EncodableMap response;
   try {
+    winrt::check_hresult(mta.status);
+    co_await winrt::resume_background();
     if (!IsPackagedProcess()) {
       response = StatusFailure("unavailable", kUnavailableMessage);
     } else {
@@ -345,12 +370,14 @@ winrt::fire_and_forget GetConsumableBalanceAsync(std::string store_id,
 // an error, and empty licences without a message as "owns nothing".
 winrt::fire_and_forget GetAddOnLicensesAsync(SharedResult result) {
   winrt::apartment_context platform_thread;
-  co_await winrt::resume_background();
+  MtaUsage mta;
 
   EncodableList licenses;
   bool verified_online = false;
   std::optional<std::string> failure;
   try {
+    winrt::check_hresult(mta.status);
+    co_await winrt::resume_background();
     if (!IsPackagedProcess()) {
       failure = kUnavailableMessage;
     } else {
@@ -385,6 +412,7 @@ winrt::fire_and_forget GetAddOnLicensesAsync(SharedResult result) {
           bool complete = query && query.ExtendedError().value == 0 &&
                           query.Products() && HasInternetAccess();
           EncodableList extra;
+          std::set<std::string> online;
           if (complete) {
             for (const auto& pair : query.Products()) {
               const auto product = pair.Value();
@@ -394,35 +422,50 @@ winrt::fire_and_forget GetAddOnLicensesAsync(SharedResult result) {
               }
               if (!product.IsInUserCollection()) continue;
               const std::string store_id = ToUtf8(product.StoreId());
-              if (listed.count(store_id) != 0) continue;
+
               // Collection membership counts as ownership. Use the owned
               // SKU's end date when the Store gives one.
               std::string sku_store_id;
-              std::string expiration = kNeverExpires;
+              std::string expiration = helpers::CollectionExpiry(0);
               if (const auto skus = product.Skus()) {
                 for (const auto& sku : skus) {
                   if (!sku || !sku.IsInUserCollection()) continue;
                   sku_store_id = ToUtf8(sku.StoreId());
                   if (const auto data = sku.CollectionData()) {
                     if (data.EndDate().time_since_epoch().count() > 0) {
-                      expiration = IsoUtc(data.EndDate());
+                      expiration = helpers::CollectionExpiry(data.EndDate().time_since_epoch().count());
                     }
                   }
                   break;
                 }
               }
-              listed.insert(store_id);
+              if (expiration.empty()) {
+                complete = false;
+                continue;
+              }
+              online.insert(store_id);
               extra.emplace_back(LicenseToMap(store_id, sku_store_id,
                                               ToUtf8(product.InAppOfferToken()),
                                               expiration, true));
             }
           }
           if (complete) {
-            for (auto& item : extra) licenses.push_back(std::move(item));
-            verified_online = true;
+            EncodableList merged;
+            for (const auto& item : licenses) {
+              const auto& map = std::get<EncodableMap>(item);
+              const auto id = helpers::ReadString(map, "storeId");
+              if (!id || online.count(*id) == 0) merged.push_back(item);
+            }
+            for (auto& item : extra) merged.push_back(std::move(item));
+            licenses = std::move(merged);
+            verified_online = helpers::AggregateVerified(complete, listed, online);
+          } else {
+            failure = "Incomplete online add-on metadata; cached licenses retained.";
           }
+        } catch (const std::exception& e) {
+          failure = e.what();
         } catch (...) {
-          // Keep the cached licences; verifiedOnline stays false.
+          failure = "Online add-on query failed; cached licenses retained.";
         }
       }
     }
@@ -444,14 +487,66 @@ winrt::fire_and_forget GetAddOnLicensesAsync(SharedResult result) {
   co_await ReplyAsync(platform_thread, result, EncodableValue(response));
 }
 
+// Recover Store-owned units. UnmanagedConsumable has one outstanding purchase;
+// Consumable balances may contain several independently deliverable units.
+winrt::fire_and_forget GetPendingConsumablesAsync(SharedResult result) {
+  winrt::apartment_context platform_thread;
+  MtaUsage mta;
+  EncodableList purchases;
+  EncodableMap response;
+  try {
+    winrt::check_hresult(mta.status);
+    co_await winrt::resume_background();
+    if (!IsPackagedProcess()) {
+      // No Store purchases can be made or recovered in an unpackaged app.
+    } else {
+      if (!HasInternetAccess()) throw std::runtime_error("Consumable recovery requires an online Store query.");
+      auto context = winstore::StoreContext::GetDefault();
+      auto kinds = winrt::single_threaded_vector<winrt::hstring>({L"Consumable", L"UnmanagedConsumable"});
+      auto query = co_await context.GetUserCollectionAsync(kinds);
+      if (!query || query.ExtendedError().value != 0 || !query.Products())
+        throw std::runtime_error("Could not read consumable ownership.");
+      for (const auto& pair : query.Products()) {
+        const auto product = pair.Value();
+        if (!product) throw std::runtime_error("Incomplete consumable collection.");
+        if (!product.IsInUserCollection()) continue;
+        uint32_t quantity = 1;
+        if (product.ProductKind() == L"Consumable") {
+          auto balance = co_await context.GetConsumableBalanceRemainingAsync(product.StoreId());
+          if (!balance || balance.Status() != winstore::StoreConsumableStatus::Succeeded ||
+              balance.ExtendedError().value != 0)
+            throw std::runtime_error("Could not read consumable balance.");
+          quantity = balance.BalanceRemaining();
+        } else if (product.ProductKind() != L"UnmanagedConsumable") {
+          continue;
+        }
+        if (quantity > 0) purchases.emplace_back(EncodableMap{
+            {EncodableValue("storeId"), EncodableValue(ToUtf8(product.StoreId()))},
+            {EncodableValue("quantity"), EncodableValue(static_cast<int64_t>(quantity))}});
+      }
+      if (!HasInternetAccess()) throw std::runtime_error("Connectivity lost during consumable recovery.");
+    }
+    response[EncodableValue("purchases")] = EncodableValue(purchases);
+  } catch (const winrt::hresult_error& e) {
+    response[EncodableValue("message")] = EncodableValue(ToUtf8(e.message()));
+  } catch (const std::exception& e) {
+    response[EncodableValue("message")] = EncodableValue(e.what());
+  } catch (...) {
+    response[EncodableValue("message")] = EncodableValue("Consumable recovery failed.");
+  }
+  co_await ReplyAsync(platform_thread, result, EncodableValue(response));
+}
+
 // "message" only on failure, as for getAddOnLicenses.
 winrt::fire_and_forget GetAppLicenseAsync(SharedResult result) {
   winrt::apartment_context platform_thread;
-  co_await winrt::resume_background();
+  MtaUsage mta;
 
   EncodableMap response{{EncodableValue("isActive"), EncodableValue(false)},
                         {EncodableValue("isTrial"), EncodableValue(false)}};
   try {
+    winrt::check_hresult(mta.status);
+    co_await winrt::resume_background();
     if (!IsPackagedProcess()) {
       response[EncodableValue("message")] = EncodableValue(kUnavailableMessage);
     } else {
@@ -500,6 +595,11 @@ bool IsStoreAvailable() {
 
 }  // namespace
 
+void PurchaseForTesting(HWND hwnd, const std::string& store_id,
+    SharedResult result, PurchaseRequest request) {
+  PurchaseAsync(hwnd, store_id, std::move(result), std::move(request));
+}
+
 // --- Plugin class ---------------------------------------------------------
 
 // static
@@ -542,6 +642,40 @@ void InAppPurchaseMsStorePlugin::HandleMethodCall(
   if (method == "isAvailable") {
     // No async Store call: answer synchronously.
     result->Success(EncodableValue(IsStoreAvailable()));
+    return;
+  }
+
+  if (method == "countryCode") {
+    try {
+      result->Success(EncodableValue(ToUtf8(
+          winrt::Windows::System::UserProfile::GlobalizationPreferences::HomeGeographicRegion())));
+    } catch (...) {
+      result->Success(EncodableValue(""));
+    }
+    return;
+  }
+
+  if (method == "readPurchaseJournal" || method == "writePurchaseJournal") {
+    try {
+      if (method == "readPurchaseJournal" && !IsPackagedProcess()) {
+        result->Success(EncodableValue("[]"));
+        return;
+      }
+      const auto folder = winrt::Windows::Storage::ApplicationData::Current().LocalFolder().Path();
+      const std::filesystem::path path = std::filesystem::path(folder.c_str()) / L"in_app_purchase_msstore" / L"pending.json";
+      if (method == "readPurchaseJournal") {
+        result->Success(EncodableValue(journal::Read(path)));
+      } else {
+        const auto text = method_call.arguments() ? std::get_if<std::string>(method_call.arguments()) : nullptr;
+        if (!text) { result->Error("bad_args", "Journal must be JSON text."); return; }
+        journal::Write(path, *text);
+        result->Success(EncodableValue(true));
+      }
+    } catch (const std::exception& e) {
+      result->Error("journal_io", e.what());
+    } catch (...) {
+      result->Error("journal_io", "Could not access the purchase journal.");
+    }
     return;
   }
 
@@ -596,6 +730,11 @@ void InAppPurchaseMsStorePlugin::HandleMethodCall(
     for (int i = 0; i < 8; ++i) tracking_id.Data4[i] = tracking->data4[i];
     ReportConsumableFulfillmentAsync(*store_id, static_cast<uint32_t>(*quantity),
                                      tracking_id, shared_result);
+    return;
+  }
+
+  if (method == "getPendingConsumables") {
+    GetPendingConsumablesAsync(shared_result);
     return;
   }
 

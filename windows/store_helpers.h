@@ -8,8 +8,10 @@
 #include <flutter/encodable_value.h>
 
 #include <cstdint>
+#include <algorithm>
 #include <cstdio>
 #include <optional>
+#include <set>
 #include <string>
 #include <vector>
 
@@ -90,6 +92,16 @@ inline std::string FormatIsoUtc(int64_t ticks) {
                 static_cast<long long>(second_of_day / 60 % 60),
                 static_cast<long long>(second_of_day % 60));
   return buffer;
+}
+
+// Reconciliation policy extracted for regression coverage.
+inline bool AggregateVerified(bool complete, const std::set<std::string>& cached,
+                              const std::set<std::string>& online) {
+  return complete && std::includes(online.begin(), online.end(),
+                                    cached.begin(), cached.end());
+}
+inline std::string CollectionExpiry(int64_t ticks) {
+  return ticks > 0 ? FormatIsoUtc(ticks) : "";
 }
 
 struct GuidParts {

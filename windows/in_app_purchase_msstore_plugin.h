@@ -16,8 +16,17 @@
 #include <Windows.h>
 
 #include <memory>
+#include <functional>
+#include <winrt/Windows.Services.Store.h>
 
 namespace in_app_purchase_msstore {
+
+// Injectable initiation seam: exercises the production coroutine without Store UI.
+using PurchaseRequest = std::function<winrt::Windows::Foundation::IAsyncOperation<
+    winrt::Windows::Services::Store::StorePurchaseResult>(HWND, const std::string&)>;
+void PurchaseForTesting(HWND hwnd, const std::string& store_id,
+    std::shared_ptr<flutter::MethodResult<flutter::EncodableValue>> result,
+    PurchaseRequest request);
 
 class InAppPurchaseMsStorePlugin : public flutter::Plugin {
  public:

@@ -27,14 +27,34 @@ void main() {
   setUp(() {
     calls = <MethodCall>[];
     replies = <String, Object? Function(MethodCall)>{};
+    var journal = '[]';
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(_channel, (MethodCall call) async {
+          if (call.method == 'readPurchaseJournal') return journal;
+          if (call.method == 'writePurchaseJournal') {
+            journal = call.arguments as String;
+            return true;
+          }
+          if (call.method == 'getPendingConsumables') {
+            return {'purchases': <Object?>[]};
+          }
+          if (call.method == 'isAvailable' &&
+              !replies.containsKey(call.method)) {
+            return true;
+          }
           calls.add(call);
           final Object? Function(MethodCall)? reply = replies[call.method];
           if (reply == null) {
             throw MissingPluginException(call.method);
           }
-          return reply(call);
+          final value = reply(call);
+          if (call.method == 'purchase' && value is Map) {
+            return {
+              ...value,
+              'requestStarted': value['status'] != 'unavailable',
+            };
+          }
+          return value;
         });
     platform = InAppPurchaseMsStorePlatform(clock: () => now);
   });
@@ -148,7 +168,7 @@ void main() {
       final bool started = await platform.buyNonConsumable(
         purchaseParam: PurchaseParam(productDetails: _product('9DUR')),
       );
-      expect(started, isTrue);
+      expect(started, status != 'unavailable');
       return (await next).single;
     }
 
@@ -246,7 +266,7 @@ void main() {
       );
       expect(p.purchaseID, args['trackingId']);
       expect(p.status, PurchaseStatus.purchased);
-      expect(p.pendingCompletePurchase, isFalse);
+      expect(p.pendingCompletePurchase, isTrue);
     });
 
     test(
@@ -423,9 +443,10 @@ void main() {
   });
 
   group('countryCode', () {
-    test('returns a String without calling the channel', () async {
-      expect(await platform.countryCode(), isA<String>());
-      expect(calls, isEmpty);
+    test('reads the Windows home geographic region', () async {
+      replies['countryCode'] = (_) => 'AU';
+      expect(await platform.countryCode(), 'AU');
+      expect(calls.single.method, 'countryCode');
     });
   });
 }

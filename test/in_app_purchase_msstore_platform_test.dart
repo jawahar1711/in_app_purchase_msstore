@@ -113,7 +113,7 @@ void main() {
   const Map<String, PurchaseStatus> purchaseMapping = <String, PurchaseStatus>{
     'succeeded': PurchaseStatus.purchased,
     'alreadyPurchased': PurchaseStatus.restored,
-    'notPurchased': PurchaseStatus.canceled,
+    'notPurchased': PurchaseStatus.error,
     'networkError': PurchaseStatus.error,
     'serverError': PurchaseStatus.error,
     'unavailable': PurchaseStatus.error,
@@ -206,7 +206,8 @@ void main() {
     test('each purchase gets its own trackingId', () async {
       store.reply('purchase', purchaseReply('succeeded'));
       store.reply('reportConsumableFulfillment', fulfillmentReply('succeeded'));
-      await buyConsumable();
+      final first = await buyConsumable();
+      await platform.completePurchase(first);
       await buyConsumable();
       final List<Object?> ids = store
           .callsTo('reportConsumableFulfillment')

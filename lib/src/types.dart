@@ -58,6 +58,7 @@ class MsStorePurchaseDetails extends PurchaseDetails {
     required super.transactionDate,
     required super.status,
     this.isConsumable = false,
+    this.requestStarted = false,
     this.extendedError,
     this.skuStoreId,
     this.inAppOfferToken,
@@ -73,6 +74,9 @@ class MsStorePurchaseDetails extends PurchaseDetails {
   /// True when this came from `buyConsumable`. [completePurchase] fulfils
   /// only consumables.
   final bool isConsumable;
+
+  /// Whether the native Store purchase operation was initiated.
+  final bool requestStarted;
 
   /// The Store's extended error code (HRESULT), when the purchase failed.
   final String? extendedError;
@@ -195,7 +199,8 @@ class MsStoreAddOnLicenses {
   /// Every add-on licence, expired ones included.
   final List<MsStoreAddOnLicense> licenses;
 
-  /// True when the Store confirmed the list online (not only a cache).
+  /// True only when a complete online collection confirms every emitted
+  /// ownership entry; any cached-only entry makes this false.
   final bool verifiedOnline;
 
   /// A message from the plugin when the Store could not be read.

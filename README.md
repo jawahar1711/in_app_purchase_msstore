@@ -52,9 +52,9 @@ and how to test purchases.
 | `buyNonConsumable()` | `RequestPurchaseAsync`. Durable add-ons and subscriptions |
 | `buyConsumable(autoConsume: true)` | `RequestPurchaseAsync`, then `ReportConsumableFulfillmentAsync` (quantity 1) |
 | `buyConsumable(autoConsume: false)` | `RequestPurchaseAsync`. Fulfilment waits for `completePurchase()` |
-| `completePurchase()` | Fulfils a consumable that was not auto-consumed. Does nothing for durables: the Store has no acknowledge step |
+| `completePurchase()` | Acknowledges app delivery and fulfils a consumable if needed. Does nothing for durables |
 | `restorePurchases()` | Add-on licences from `GetAppLicenseAsync`, emitted as `restored` |
-| `countryCode()` | The Store has no API for this. Returns the device's home region |
+| `countryCode()` | Windows home geographic region, not verified Store billing country |
 
 Purchase results on `purchaseStream`:
 
@@ -62,13 +62,40 @@ Purchase results on `purchaseStream`:
 |---|---|
 | `Succeeded` | `purchased` |
 | `AlreadyPurchased` | `restored` |
-| `NotPurchased` (user closed the dialog) | `canceled` |
-| `NetworkError`, `ServerError`, other | `error`, with `IAPError(source: 'msstore', code: <status>)` |
+| `NotPurchased` without a failure HRESULT, or with `ERROR_CANCELLED` | `canceled` |
+| `NotPurchased` with another failure HRESULT, `NetworkError`, `ServerError`, other | `error`, with `IAPError(source: 'msstore', code: <status>)` |
+
+### Recovering consumable deliveries
+
+Subscribe to `purchaseStream` at startup. Pending consumables are journaled locally
+and replayed with the same `purchaseID` after a restart. Durably grant content once
+per ID, then call `completePurchase` whenever `pendingCompletePurchase` is true,
+**including with `autoConsume: true`**. Auto-consumption confirms Store consumption;
+completion also acknowledges that your app delivered the item. A replay can arrive
+after the app granted content but before it acknowledged delivery, so your grant
+must be idempotent. Complete a pending delivery before buying that product again.
+
+`restorePurchases` also retries consumable recovery after connectivity returns.
+Offline recovery errors are exposed; saved deliveries and cached durable licenses
+can still be emitted. Recovery uses a package-local journal and Store ownership;
+it cannot recover already-consumed goods after uninstall, data deletion or on a
+second device. Use one platform instance/process and keep the Store account stable
+while deliveries are pending. Cross-device/account guarantees need a backend ledger.
+
+Both buy methods return whether a Store request was actually initiated, not whether
+payment succeeded. An error-bearing `NotPurchased` is an error; a result without a
+failure HRESULT is treated as cancellation because the Store supplies no finer reason.
 
 ### Windows-only extras
 
 `InAppPurchaseMsStorePlatformAddition` gives data that the shared API has no place for:
 the app licence and trial, add-on licences and the balance of a consumable.
+Failed/null app-license reads throw. `getOwnedAddOns` throws on read errors instead
+of silently returning an unlicensed result; use `getAddOnLicenses` for cache and
+error provenance. `verifiedOnline` is false if any emitted ownership is cache-only.
+Unknown subscription/timed-product expiry is never synthesized as lifetime access.
+For `reportConsumableFulfillment`, generate and persist a GUID before the call and
+supply it as `trackingId` on every retry. Missing IDs are rejected.
 
 ```dart
 final addition = InAppPurchase.instance

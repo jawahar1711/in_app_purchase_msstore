@@ -94,7 +94,10 @@ class _StorePageState extends State<StorePage> {
         case PurchaseStatus.restored:
           // A real app verifies the purchase here (for example with the
           // Microsoft Store collections API on its server) before it grants
-          // the content, and stores the result.
+          // the content. Persist the grant and purchase.purchaseID together;
+          // ignore an already-granted ID on replay. Only then acknowledge
+          // delivery with completePurchase, even when autoConsume was true.
+          // This display-only example does not grant a real consumable.
           if (purchase.productID != kConsumableId) {
             setState(() => _owned.add(purchase.productID));
           }

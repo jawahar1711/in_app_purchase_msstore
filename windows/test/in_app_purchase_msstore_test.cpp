@@ -3,6 +3,7 @@
 
 #include <flutter/encodable_value.h>
 #include <gtest/gtest.h>
+#include <winrt/Windows.Foundation.h>
 
 #include <cstdint>
 #include <optional>
@@ -10,6 +11,11 @@
 #include <vector>
 
 #include "store_helpers.h"
+#include "purchase_journal.h"
+#include "in_app_purchase_msstore_plugin.h"
+#include <flutter/method_result_functions.h>
+#include <atomic>
+#include <thread>
 
 namespace in_app_purchase_msstore {
 namespace helpers {
@@ -22,6 +28,112 @@ using flutter::EncodableValue;
 // 100-ns ticks between 1601-01-01 (WinRT DateTime epoch) and 1970-01-01.
 constexpr int64_t kTestUnixEpochTicks = 116444736000000000LL;
 constexpr int64_t kTestTicksPerSecond = 10000000LL;
+
+TEST(ReviewRegression, PurchaseInitiatesOnCallingUiThreadAndPreservesWindow) {
+  winrt::init_apartment(winrt::apartment_type::single_threaded);
+  const DWORD caller = GetCurrentThreadId();
+  const HWND hwnd = CreateWindowExW(0, L"STATIC", L"test", 0, 0, 0, 1, 1,
+                                   nullptr, nullptr, GetModuleHandleW(nullptr), nullptr);
+  ASSERT_NE(hwnd, nullptr);
+  std::atomic<DWORD> initiating_thread{0};
+  std::atomic<HWND> parent{nullptr};
+  bool done = false;
+  auto result = std::make_shared<flutter::MethodResultFunctions<EncodableValue>>(
+      [&done](const EncodableValue*) { done = true; },
+      nullptr, nullptr);
+  PurchaseForTesting(hwnd, "TESTPRODUCT1", result,
+      [&](HWND window, const std::string&) -> winrt::Windows::Foundation::IAsyncOperation<
+          winrt::Windows::Services::Store::StorePurchaseResult> {
+        initiating_thread = GetCurrentThreadId();
+        parent = window;
+        throw winrt::hresult_error(E_ABORT);
+      });
+  const auto deadline = GetTickCount64() + 5000;
+  while (!done && GetTickCount64() < deadline) {
+    MSG msg;
+    while (PeekMessageW(&msg, nullptr, 0, 0, PM_REMOVE)) {
+      TranslateMessage(&msg);
+      DispatchMessageW(&msg);
+    }
+    Sleep(1);
+  }
+  EXPECT_TRUE(done);
+  EXPECT_EQ(initiating_thread.load(), caller);
+  EXPECT_EQ(parent.load(), hwnd);
+  DestroyWindow(hwnd);
+
+}
+
+TEST(ReviewRegression, CachedOnlyOwnershipIsNotOnlineConfirmed) {
+  EXPECT_FALSE(AggregateVerified(true, {"A"}, {}));
+  EXPECT_TRUE(AggregateVerified(true, {"A"}, {"A"}));
+  EXPECT_FALSE(AggregateVerified(false, {}, {}));
+}
+
+TEST(ReviewRegression, UnknownExpiryNeverBecomesLifetime) {
+  EXPECT_EQ(CollectionExpiry(0), "");
+  EXPECT_EQ(CollectionExpiry(-1), "");
+  EXPECT_EQ(CollectionExpiry(kTestUnixEpochTicks + 253402300799LL * kTestTicksPerSecond),
+            "9999-12-31T23:59:59Z");
+}
+
+TEST(PurchaseJournal, MissingFileAtomicReplacementAndInterruptedWrite) {
+  wchar_t temporary[MAX_PATH];
+  ASSERT_NE(GetTempPathW(MAX_PATH, temporary), 0u);
+  const auto folder = std::filesystem::path(temporary) /
+      (L"iap-journal-" + std::to_wstring(GetCurrentProcessId()));
+  const auto path = folder / L"pending.json";
+  std::filesystem::remove_all(folder);
+  EXPECT_EQ(journal::Read(path), "[]");
+  journal::Write(path, "[{\"state\":\"fulfilling\"}]");
+  EXPECT_EQ(journal::Read(path), "[{\"state\":\"fulfilling\"}]");
+  {
+    winrt::handle locked(CreateFileW(path.c_str(), GENERIC_READ, FILE_SHARE_READ,
+        nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr));
+    ASSERT_TRUE(locked);
+    EXPECT_ANY_THROW(journal::Write(path, "[]"));
+    EXPECT_EQ(journal::Read(path), "[{\"state\":\"fulfilling\"}]");
+  }
+  journal::Write(path, "[]");
+  EXPECT_EQ(journal::Read(path), "[]");
+  std::filesystem::remove_all(folder);
+}
+
+winrt::Windows::Foundation::IAsyncOperation<winrt::Windows::Services::Store::StorePurchaseResult>
+FailAfterSuspension() {
+  co_await winrt::resume_background();
+  throw winrt::hresult_error(E_ABORT);
+  co_return nullptr;
+}
+
+TEST(ReviewRegression, InitiatedAsyncFailureRepliesOnUiThreadWithStartedTrue) {
+  winrt::init_apartment(winrt::apartment_type::single_threaded);
+  const DWORD caller = GetCurrentThreadId();
+  winrt::handle event(CreateEventW(nullptr, TRUE, FALSE, nullptr));
+  std::optional<EncodableMap> response;
+  DWORD reply_thread = 0;
+  auto result = std::make_shared<flutter::MethodResultFunctions<EncodableValue>>(
+      [&](const EncodableValue* value) {
+        reply_thread = GetCurrentThreadId();
+        response = std::get<EncodableMap>(*value);
+        SetEvent(event.get());
+      }, nullptr, nullptr);
+  PurchaseForTesting(nullptr, "TESTPRODUCT1", result,
+      [](HWND, const std::string&) { return FailAfterSuspension(); });
+  const auto deadline = GetTickCount64() + 5000;
+  while (WaitForSingleObject(event.get(), 0) != WAIT_OBJECT_0 && GetTickCount64() < deadline) {
+    MSG msg;
+    while (PeekMessageW(&msg, nullptr, 0, 0, PM_REMOVE)) {
+      TranslateMessage(&msg);
+      DispatchMessageW(&msg);
+    }
+    MsgWaitForMultipleObjects(0, nullptr, FALSE, 10, QS_ALLINPUT);
+  }
+  ASSERT_TRUE(response.has_value());
+  EXPECT_EQ(reply_thread, caller);
+  EXPECT_TRUE(std::get<bool>(response->at(EncodableValue("requestStarted"))));
+
+}
 
 TEST(PurchaseStatusName, MapsEveryStorePurchaseStatus) {
   EXPECT_EQ(PurchaseStatusName(0), "succeeded");

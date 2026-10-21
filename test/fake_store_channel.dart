@@ -14,6 +14,8 @@ class FakeStoreChannel {
         .setMockMethodCallHandler(storeChannel, _handle);
   }
 
+  String journal = '[]';
+
   final List<MethodCall> calls = <MethodCall>[];
 
   /// Method name -> reply, or a function of the call's arguments.
@@ -30,6 +32,17 @@ class FakeStoreChannel {
       call.arguments as Map<Object?, Object?>;
 
   Future<Object?> _handle(MethodCall call) async {
+    if (call.method == 'readPurchaseJournal') return journal;
+    if (call.method == 'writePurchaseJournal') {
+      journal = call.arguments as String;
+      return true;
+    }
+    if (call.method == 'getPendingConsumables') {
+      return {'purchases': <Object?>[]};
+    }
+    if (call.method == 'isAvailable' && !responses.containsKey(call.method)) {
+      return true;
+    }
     calls.add(call);
     final Object? Function(Object?)? response = responses[call.method];
     if (response == null) {
@@ -37,7 +50,12 @@ class FakeStoreChannel {
         'FakeStoreChannel: no reply for ${call.method}',
       );
     }
-    return response(call.arguments);
+    final raw = response(call.arguments);
+    final value = raw is Future ? await raw : raw;
+    if (call.method == 'purchase' && value is Map) {
+      return {...value, 'requestStarted': value['status'] != 'unavailable'};
+    }
+    return value;
   }
 
   void dispose() {
