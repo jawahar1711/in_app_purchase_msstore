@@ -55,6 +55,8 @@ add_subdirectory("runner")
 
 # Generated plugin build rules, which manage building the plugins and adding
 # them to the application.
+# Build the plugin's C++ unit tests with the example (CI runs them).
+set(include_in_app_purchase_msstore_tests TRUE)
 include(flutter/generated_plugins.cmake)
 
 

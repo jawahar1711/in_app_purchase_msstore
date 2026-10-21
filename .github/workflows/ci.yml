@@ -53,8 +53,14 @@ jobs:
       - run: flutter pub get
       - name: Test
         run: flutter test
-      - name: Build example for Windows
+      - name: Build example for Windows (debug, with the C++ unit tests)
         working-directory: example
         run: |
           flutter pub get
-          flutter build windows --release
+          flutter build windows --debug
+      - name: C++ unit tests
+        working-directory: example
+        run: build\windows\x64\plugins\in_app_purchase_msstore\Debug\in_app_purchase_msstore_test.exe
+      - name: Build example for Windows (release)
+        working-directory: example
+        run: flutter build windows --release
