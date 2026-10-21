@@ -1,0 +1,28 @@
+name: in_app_purchase_msstore
+description: Unofficial Microsoft Store (Windows) implementation of Flutter's in_app_purchase plugin, built on Windows.Services.Store.StoreContext.
+version: 0.1.0
+publish_to: none # private until the owner decides to publish
+repository: https://github.com/jawahar1711/in_app_purchase_msstore
+topics: [in-app-purchase, windows, microsoft-store, iap, payment]
+
+environment:
+  sdk: ^3.10.0
+  flutter: ">=3.38.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  in_app_purchase_platform_interface: ^1.4.1
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+
+flutter:
+  plugin:
+    implements: in_app_purchase
+    platforms:
+      windows:
+        pluginClass: InAppPurchaseMsStorePluginCApi
+        dartPluginClass: InAppPurchaseMsStorePlatform
