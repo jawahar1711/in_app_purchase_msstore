@@ -153,6 +153,11 @@ subscriptions. These paths are covered by the unit and native tests only.
 * **Subscriptions** are bought and restored like durables. Upgrades, downgrades and
   offer codes are not supported.
 
+## Releases
+
+A new version is released by pushing a tag `vX.Y.Z` that matches `version` in
+`pubspec.yaml`; GitHub Actions then publishes it to pub.dev.
+
 ## License
 
 BSD-3-Clause. See [LICENSE](LICENSE).
